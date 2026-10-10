@@ -1,5 +1,6 @@
 """Herramientas de operación.
 
+    python -m exam_engine.cli bootstrap-roles
     python -m exam_engine.cli seed-catalog seeds/udl_siaf_catalog.json
     python -m exam_engine.cli create-admin --username admin --role platform_admin --temporary
     python -m exam_engine.cli bank-report banco.json --quota 50 --max-variants 2 --seconds 20 --out reporte.md
@@ -33,6 +34,33 @@ def _create_admin(a: argparse.Namespace) -> None:
             temporary=a.temporary,
         )
     )
+
+
+def _bootstrap_roles(a: argparse.Namespace) -> None:
+    """Crea/actualiza el rol de aplicación ``exam_app`` (sin superusuario ni BYPASSRLS) usando la conexión
+    del administrador (MIGRATION_DATABASE_URL). La contraseña se toma de APP_DB_PASSWORD."""
+    import psycopg
+    from psycopg import sql
+    from sqlalchemy.engine import make_url
+
+    admin_url = os.environ.get("MIGRATION_DATABASE_URL")
+    password = os.environ.get("APP_DB_PASSWORD")
+    if not admin_url or not password:
+        raise SystemExit("Define MIGRATION_DATABASE_URL y APP_DB_PASSWORD.")
+    url = make_url(admin_url)
+    conninfo = url.set(drivername="postgresql").render_as_string(hide_password=False)
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        exists = conn.execute("SELECT 1 FROM pg_roles WHERE rolname = 'exam_app'").fetchone()
+        if not exists:
+            conn.execute("CREATE ROLE exam_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS")
+        conn.execute(sql.SQL("ALTER ROLE exam_app WITH LOGIN PASSWORD {}").format(sql.Literal(password)))
+        conn.execute(sql.SQL("GRANT CONNECT ON DATABASE {} TO exam_app").format(sql.Identifier(url.database)))
+        conn.execute("GRANT USAGE ON SCHEMA public TO exam_app")
+        row = conn.execute(
+            "SELECT rolsuper, rolbypassrls, rolcreaterole FROM pg_roles WHERE rolname = 'exam_app'"
+        ).fetchone()
+    state = "actualizado" if exists else "creado"
+    print(f"exam_app {state}: superuser={row[0]} bypassrls={row[1]} createrole={row[2]}")
 
 
 def _seed(a: argparse.Namespace) -> None:
@@ -78,6 +106,9 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("--university", help="Código de universidad (no aplica a platform_admin)")
     c.add_argument("--temporary", action="store_true", help="Obliga a cambiar la contraseña al entrar")
     c.set_defaults(fn=_create_admin)
+
+    b = sub.add_parser("bootstrap-roles", help="Crea/actualiza el rol exam_app (usa MIGRATION_DATABASE_URL)")
+    b.set_defaults(fn=_bootstrap_roles)
 
     sd = sub.add_parser("seed-catalog", help="Siembra universidad, materia, módulos y fuentes desde JSON")
     sd.add_argument("file")
