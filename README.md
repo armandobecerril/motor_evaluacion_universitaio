@@ -12,8 +12,8 @@ Plataforma de exámenes en línea para varias universidades y materias. Primer c
 |---|---|
 | H1 estructura, modelo multi-universidad, migración, CI | ✔ |
 | Acceso docente (usuario/contraseña), importador del banco + reporte de calidad, panel docente (subir y validar banco) | ✔ |
-| H2 crear examen con fecha + código de acceso, revisión/aprobación, motor del alumno (200 preguntas, 20 s, +1/−1/0) | pendiente |
-| H3 monitoreo, resultados CSV, anulación/reapertura auditada | pendiente |
+| H2 revisión/aprobación, crear examen con fecha + código de acceso único, motor del alumno (selección balanceada, reloj del servidor, omitir, +1/−1/0, reanudación) | ✔ |
+| H3 calificaciones en vivo (cada 10 s) y CSV para Excel | ✔ (pendiente: anulación/reapertura auditada de intentos) |
 | H5 Bicep, prueba de carga (30 usuarios), guías · H6 despliegue | pendiente |
 
 ## Requisitos locales (macOS)
@@ -53,6 +53,11 @@ psql postgres -c "CREATE ROLE exam_app LOGIN PASSWORD 'apppass' NOSUPERUSER NOBY
 |---|---|---|
 | propietario (`exam_owner`) | Migraciones (DDL) | `MIGRATION_DATABASE_URL` |
 | `exam_app` | API: solo DML, sujeto a RLS | `DATABASE_URL` |
+
+## Flujo de uso
+1. **Docente** (`/admin`): elige materia → *Banco*: sube el JSON/CSV, valida e importa → *Revisión*: aprueba preguntas → *Exámenes*: crea el examen (fecha, segundos, preguntas por módulo, penalización) y pulsa **Publicar y generar código**.
+2. **Alumno** (`/ingresar`): código de acceso + nombre completo + matrícula → reglas → examen. Cada respuesta se guarda al instante; si recarga, continúa donde iba sin tiempo extra.
+3. **Docente** → *Ver calificaciones*: tabla en vivo y **Descargar CSV (Excel)**.
 
 ## Banco de preguntas
 - Se sube desde el panel docente (`/admin`) o se valida con el CLI. Formato: ADR-006.

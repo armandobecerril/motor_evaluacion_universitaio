@@ -1,18 +1,16 @@
 import { useEffect, useState } from 'react';
-import {
-  adminApi,
-  ApiError,
-  type BankSummary,
-  type CatalogEntry,
-  type ImportResult,
-  type ValidateResult,
-} from '../../lib/admin';
+import { adminApi, ApiError, type BankSummary, type ImportResult, type ValidateResult } from '../../lib/admin';
+
+export const STATUS_ES: Record<string, string> = {
+  draft: 'borrador',
+  reviewed: 'revisada',
+  approved: 'aprobada',
+  retired: 'retirada',
+};
 
 const LEVEL_LABEL: Record<string, string> = { BLOQUEANTE: 'Bloqueante', ALTO: 'Alto', MEDIO: 'Medio', INFO: 'Info' };
 
-export function BankPanel() {
-  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
-  const [courseId, setCourseId] = useState('');
+export function BankPanel({ courseId }: { courseId: string }) {
   const [summary, setSummary] = useState<BankSummary | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [quota, setQuota] = useState(50);
@@ -22,16 +20,6 @@ export function BankPanel() {
   const [imported, setImported] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    adminApi
-      .catalog()
-      .then((c) => {
-        setCatalog(c);
-        if (c.length === 1 && c[0]) setCourseId(c[0].course.id);
-      })
-      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : 'No se pudo cargar el catálogo.'));
-  }, []);
 
   useEffect(() => {
     if (!courseId) return;
@@ -52,35 +40,20 @@ export function BankPanel() {
 
   return (
     <div className="stack">
-      <section className="card" aria-labelledby="paso-materia">
-        <h2 id="paso-materia">1. Universidad y materia</h2>
-        <label>
-          Materia
-          <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
-            <option value="">Selecciona…</option>
-            {catalog.map((c) => (
-              <option key={c.course.id} value={c.course.id}>
-                {c.university.code} · {c.course.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {summary && (
-          <p className="muted">
-            Banco actual: {summary.total} reactivos vigentes
-            {Object.entries(summary.modules).map(([m, st]) => (
-              <span key={m}>
-                {' '}
-                · M{m}: {Object.entries(st).map(([s, n]) => `${n} ${s}`).join(', ')}
-              </span>
-            ))}
-          </p>
-        )}
-      </section>
-
+      {summary && (
+        <p className="muted">
+          Banco actual: {summary.total} reactivos vigentes
+          {Object.entries(summary.modules).map(([m, st]) => (
+            <span key={m}>
+              {' '}
+              · M{m}: {Object.entries(st).map(([k, n]) => `${n} ${STATUS_ES[k] ?? k}`).join(', ')}
+            </span>
+          ))}
+        </p>
+      )}
       {courseId && (
         <section className="card" aria-labelledby="paso-banco">
-          <h2 id="paso-banco">2. Banco maestro de preguntas</h2>
+          <h2 id="paso-banco">Banco maestro de preguntas</h2>
           <p className="muted">
             Sube el JSON o CSV. Primero se valida sin guardar nada; si no hay errores podrás importarlo. Reimportar el
             mismo archivo no duplica preguntas; los cambios crean una nueva versión.

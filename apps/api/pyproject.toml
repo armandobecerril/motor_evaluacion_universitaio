@@ -16,7 +16,7 @@ ignore = ["S101"]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106", "S107", "S608", "E501"]
+"tests/*" = ["S105", "S106", "S107", "S311", "S608", "E501"]
 "migrations/*" = ["S608"]
 
 [tool.pytest.ini_options]

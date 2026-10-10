@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { adminApi, ApiError, type Me } from '../lib/admin';
 import { BankPanel } from './admin/BankPanel';
+import { ExamsPanel } from './admin/ExamsPanel';
+import { ReviewPanel } from './admin/ReviewPanel';
+import type { CatalogEntry } from '../lib/admin';
 
 export function AdminPage() {
   const [me, setMe] = useState<Me | null | undefined>(undefined);
@@ -27,7 +30,7 @@ export function AdminPage() {
           </button>
         </div>
       </div>
-      <BankPanel />
+      <AdminHome />
     </section>
   );
 }
@@ -114,5 +117,64 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
         <button className="button primary">Guardar</button>
       </form>
     </section>
+  );
+}
+
+type Tab = 'banco' | 'revision' | 'examenes';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'banco', label: '1. Banco de preguntas' },
+  { id: 'revision', label: '2. Revisión y aprobación' },
+  { id: 'examenes', label: '3. Exámenes y calificaciones' },
+];
+
+function AdminHome() {
+  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [courseId, setCourseId] = useState('');
+  const [tab, setTab] = useState<Tab>('banco');
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    adminApi
+      .catalog()
+      .then((c) => {
+        setCatalog(c);
+        if (c[0]) setCourseId(c[0].course.id);
+      })
+      .catch(() => setCatalog([]));
+  }, []);
+
+  return (
+    <div className="stack">
+      <section className="card">
+        <label>
+          Universidad y materia
+          <select value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+            {catalog.map((c) => (
+              <option key={c.course.id} value={c.course.id}>
+                {c.university.code} · {c.course.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+      <div role="tablist" aria-label="Secciones del panel" className="tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            className={tab === t.id ? 'tab active' : 'tab'}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {courseId && tab === 'banco' && <BankPanel key={`b${courseId}${version}`} courseId={courseId} />}
+      {courseId && tab === 'revision' && (
+        <ReviewPanel key={`r${courseId}`} courseId={courseId} onChanged={() => setVersion((v) => v + 1)} />
+      )}
+      {courseId && tab === 'examenes' && <ExamsPanel key={`e${courseId}${version}`} courseId={courseId} />}
+    </div>
   );
 }

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request, Response
 
-from .api import admin, health
+from .api import admin, admin_exams, health, student
 from .config import get_settings
 
 SECURITY_HEADERS = {
@@ -40,6 +40,8 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api")
     app.include_router(admin.router, prefix="/api")
+    app.include_router(admin_exams.router, prefix="/api")
+    app.include_router(student.router, prefix="/api")
     return app
 
 
