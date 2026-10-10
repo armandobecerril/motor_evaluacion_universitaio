@@ -26,3 +26,6 @@ local.settings.json
 # Materiales académicos con derechos: fuera de cualquier repositorio o despliegue
 source_materials/
 *.pdf
+
+# Bancos con claves de respuesta: nunca al repositorio
+bank/private/

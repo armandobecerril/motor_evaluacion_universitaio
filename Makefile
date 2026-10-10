@@ -1,9 +1,9 @@
-# Comandos locales. Requiere: Python 3.12, Node 20+, PostgreSQL 16/17 local.
+# Comandos locales. Requiere: Python 3.12, Node 20+, PostgreSQL 16/17 local y apps/api/.env.
 API=apps/api
 WEB=apps/web
-PY=$(API)/.venv/bin/python
+ENV=set -a && . ./.env && set +a
 
-.PHONY: setup api-setup web-setup db-up migrate seed test api-test web-test lint build check
+.PHONY: setup api-setup web-setup db-up migrate seed admin api web test api-test web-test
 
 setup: api-setup web-setup
 
@@ -17,13 +17,25 @@ db-up:
 	docker compose up -d db
 
 migrate:
-	cd $(API) && set -a && . ./.env && set +a && .venv/bin/alembic upgrade head
+	cd $(API) && $(ENV) && .venv/bin/alembic upgrade head
 
 seed:
-	cd $(API) && set -a && . ./.env && set +a && .venv/bin/python -m scripts.seed_catalog seeds/siaf_catalog.json
+	cd $(API) && $(ENV) && .venv/bin/python -m exam_engine.cli seed-catalog seeds/udl_siaf_catalog.json
+
+# make admin            → crea/restablece 'admin' (pide contraseña)
+# make admin TEMP=1     → contraseña temporal: obliga a cambiarla al entrar
+admin:
+	cd $(API) && $(ENV) && .venv/bin/python -m exam_engine.cli create-admin --username admin \
+		--display-name "Administrador" --role platform_admin $(if $(TEMP),--temporary,)
+
+api:
+	cd $(API) && $(ENV) && .venv/bin/uvicorn exam_engine.main:app --reload --port 8000
+
+web:
+	cd $(WEB) && npm run dev
 
 api-test:
-	cd $(API) && set -a && . ./.env && set +a && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/python -m pytest -q
+	cd $(API) && $(ENV) && .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/python -m pytest -q
 
 web-test:
 	cd $(WEB) && npm run lint && npm run typecheck && npm test && npm run build && npm run check:bundle

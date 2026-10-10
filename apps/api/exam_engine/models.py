@@ -1,11 +1,15 @@
-"""Modelo de datos multi-universidad del motor de evaluación (ADR-001, ADR-003).
+"""Modelo de datos multi-universidad del motor de evaluación.
+
+Nombres de tablas según INSTRUCCIONES (UDL): universities, courses, exams, question_bank,
+question_options, exam_attempts, attempt_questions, attempt_answers, audit_events; más tablas de
+soporte (course_modules, course_sources, administrators, administrator_courses, question_imports,
+exam_questions, students, attempt_results, access_throttle).
 
 Reglas generales:
-- Toda tabla con datos de una universidad lleva ``institution_id`` y queda bajo
-  Row-Level Security (ver migración 0001). La tabla ``institutions`` no.
+- Toda tabla con datos de una universidad lleva ``university_id`` y queda bajo Row-Level Security
+  (migración 0001). Llaves foráneas compuestas ``(id, university_id)`` impiden referencias cruzadas.
 - Tiempos en UTC (``timestamptz``).
-- Las claves de respuesta (``question_options.is_correct``) y ``questions.rationale``
-  nunca se exponen en DTOs de estudiante.
+- ``question_options.is_correct`` y ``question_bank.rationale`` nunca salen en DTOs de alumno.
 """
 
 from __future__ import annotations
@@ -51,17 +55,18 @@ Base.metadata.naming_convention = NAMING_CONVENTION  # type: ignore[assignment]
 
 
 def _enum(name: str, *values: str) -> Enum:
-    # Enums como VARCHAR + CHECK: más fáciles de evolucionar con migraciones.
+    # VARCHAR + CHECK: más fácil de evolucionar que ENUM nativo.
     return Enum(*values, name=name, native_enum=False, create_constraint=True, length=32)
 
 
-ADMIN_ROLE = _enum("admin_role", "platform_admin", "institution_admin", "teacher")
+ADMIN_ROLE = _enum("admin_role", "platform_admin", "university_admin", "teacher")
 SOURCE_USAGE = _enum("source_usage", "question_source", "scenario_inspiration")
 BLOOM = _enum("bloom_level", "recordar", "comprender", "aplicar", "analizar", "evaluar", "crear")
-DIFFICULTY = _enum("difficulty", "baja", "media", "alta")
+DIFFICULTY = _enum("difficulty", "baja", "intermedia", "alta")
 QUESTION_STATUS = _enum("question_status", "draft", "reviewed", "approved", "retired")
-SESSION_STATUS = _enum("session_status", "in_progress", "finished", "expired", "voided")
-SQ_STATE = _enum("session_question_state", "pending", "served", "answered", "omitted", "expired")
+EXAM_STATUS = _enum("exam_status", "draft", "published", "closed", "cancelled")
+ATTEMPT_STATUS = _enum("attempt_status", "in_progress", "finished", "expired", "voided")
+AQ_STATE = _enum("attempt_question_state", "pending", "served", "answered", "omitted", "expired")
 OUTCOME = _enum("answer_outcome", "correct", "wrong", "omitted", "expired")
 
 
@@ -71,7 +76,7 @@ def _pk() -> Mapped[uuid.UUID]:
 
 def _tenant() -> Mapped[uuid.UUID]:
     return mapped_column(
-        UUID(as_uuid=True), ForeignKey("institutions.id", ondelete="RESTRICT"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey("universities.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
 
@@ -79,11 +84,20 @@ def _created() -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+def _fk(cols: list[str], table: str, **kw: Any) -> ForeignKeyConstraint:
+    """FK compuesta (id, university_id) → garantiza misma universidad."""
+    return ForeignKeyConstraint(cols, [f"{table}.id", f"{table}.university_id"], **kw)
+
+
+def _tenant_uq(table: str) -> UniqueConstraint:
+    return UniqueConstraint("id", "university_id", name=f"uq_{table}_id_tenant")
+
+
 # ---------------------------------------------------------------- catálogo ---
 
 
-class Institution(Base):
-    __tablename__ = "institutions"
+class University(Base):
+    __tablename__ = "universities"
     id: Mapped[uuid.UUID] = _pk()
     code: Mapped[str] = mapped_column(String(32), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -91,16 +105,13 @@ class Institution(Base):
     created_at: Mapped[datetime] = _created()
 
 
-class Subject(Base):
-    """Materia. ``config`` guarda parámetros por defecto (módulos, tamaño de examen, scoring...)."""
+class Course(Base):
+    """Materia. ``config`` guarda parámetros por defecto para nuevos exámenes."""
 
-    __tablename__ = "subjects"
-    __table_args__ = (
-        UniqueConstraint("institution_id", "code"),
-        UniqueConstraint("id", "institution_id", name="uq_subjects_id_tenant"),
-    )
+    __tablename__ = "courses"
+    __table_args__ = (UniqueConstraint("university_id", "code"), _tenant_uq("courses"))
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
+    university_id: Mapped[uuid.UUID] = _tenant()
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
@@ -108,39 +119,35 @@ class Subject(Base):
     created_at: Mapped[datetime] = _created()
 
 
-class SubjectModule(Base):
-    __tablename__ = "subject_modules"
+class CourseModule(Base):
+    __tablename__ = "course_modules"
     __table_args__ = (
-        UniqueConstraint("subject_id", "module_number"),
-        UniqueConstraint("id", "institution_id", name="uq_subject_modules_id_tenant"),
+        UniqueConstraint("course_id", "module_number"),
+        _tenant_uq("course_modules"),
         CheckConstraint("module_number BETWEEN 1 AND 50", name="module_number_range"),
-        CheckConstraint("bank_target >= 0", name="bank_target_nonneg"),
-        ForeignKeyConstraint(["subject_id", "institution_id"], ["subjects.id", "subjects.institution_id"]),
+        _fk(["course_id", "university_id"], "courses"),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    university_id: Mapped[uuid.UUID] = _tenant()
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     module_number: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    bank_target: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
 
 
-class SubjectSource(Base):
-    """Material académico autorizado (PDF) de una materia. El importador valida citas contra esta tabla."""
+class CourseSource(Base):
+    """Material académico autorizado de una materia. El importador valida citas contra esta tabla."""
 
-    __tablename__ = "subject_sources"
+    __tablename__ = "course_sources"
     __table_args__ = (
-        UniqueConstraint("subject_id", "file_name"),
-        UniqueConstraint("id", "institution_id", name="uq_subject_sources_id_tenant"),
+        UniqueConstraint("course_id", "file_name"),
+        _tenant_uq("course_sources"),
         CheckConstraint("page_count > 0", name="page_count_positive"),
-        ForeignKeyConstraint(["subject_id", "institution_id"], ["subjects.id", "subjects.institution_id"]),
+        _fk(["course_id", "university_id"], "courses"),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    module_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("subject_modules.id"), nullable=True
-    )
+    university_id: Mapped[uuid.UUID] = _tenant()
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    module_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     page_count: Mapped[int] = mapped_column(Integer, nullable=False)
     usage: Mapped[str] = mapped_column(SOURCE_USAGE, nullable=False)
@@ -151,242 +158,233 @@ class SubjectSource(Base):
 
 
 class Administrator(Base):
-    """Docentes y administradores (Entra ID). ``institution_id`` NULL solo para platform_admin."""
+    """Docentes y administradores. Acceso con usuario y contraseña (hash Argon2id); Entra ID opcional.
+    ``university_id`` NULL solo para platform_admin."""
 
     __tablename__ = "administrators"
     __table_args__ = (
-        CheckConstraint("(role = 'platform_admin') = (institution_id IS NULL)", name="platform_admin_has_no_tenant"),
+        CheckConstraint("(role = 'platform_admin') = (university_id IS NULL)", name="platform_admin_has_no_tenant"),
+        CheckConstraint("password_hash IS NOT NULL OR entra_object_id IS NOT NULL", name="has_credential"),
+        CheckConstraint("failed_logins >= 0", name="failed_logins_nonneg"),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("institutions.id"), nullable=True, index=True
+    university_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("universities.id"), nullable=True, index=True
     )
-    entra_object_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    username: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    entra_object_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[str] = mapped_column(ADMIN_ROLE, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    failed_logins: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
-class AdministratorSubject(Base):
-    """Alcance de un docente: materias que puede ver/administrar."""
+class AdminSession(Base):
+    """Sesión de docente (cookie HttpOnly). Solo se guarda el hash del token. Sin RLS: se resuelve
+    antes de conocer la universidad; el acceso a datos se limita después con el contexto RLS."""
 
-    __tablename__ = "administrator_subjects"
-    __table_args__ = (
-        ForeignKeyConstraint(["subject_id", "institution_id"], ["subjects.id", "subjects.institution_id"]),
+    __tablename__ = "admin_sessions"
+    id: Mapped[uuid.UUID] = _pk()
+    administrator_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("administrators.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    created_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AdministratorCourse(Base):
+    __tablename__ = "administrator_courses"
+    __table_args__ = (_fk(["course_id", "university_id"], "courses"),)
     administrator_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("administrators.id", ondelete="CASCADE"), primary_key=True
     )
-    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    university_id: Mapped[uuid.UUID] = _tenant()
 
 
 class Student(Base):
+    """Alumno identificado por matrícula dentro de su universidad (registro libre al ingresar)."""
+
     __tablename__ = "students"
-    __table_args__ = (
-        UniqueConstraint("institution_id", "matricula"),
-        UniqueConstraint("id", "institution_id", name="uq_students_id_tenant"),
-    )
+    __table_args__ = (UniqueConstraint("university_id", "matricula"), _tenant_uq("students"))
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
+    university_id: Mapped[uuid.UUID] = _tenant()
     matricula: Mapped[str] = mapped_column(String(64), nullable=False)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    group_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
 # --------------------------------------------------------- banco académico ---
 
 
-class Question(Base):
-    """Reactivo versionado. Una corrección crea una nueva ``version``; nunca se edita una aprobada."""
+class QuestionImport(Base):
+    """Bitácora de cada archivo de banco importado (metadatos institucionales sin alterar)."""
 
-    __tablename__ = "questions"
+    __tablename__ = "question_imports"
+    __table_args__ = (_tenant_uq("question_imports"), _fk(["course_id", "university_id"], "courses"))
+    id: Mapped[uuid.UUID] = _pk()
+    university_id: Mapped[uuid.UUID] = _tenant()
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    bank_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_version_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unchanged_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    imported_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    imported_at: Mapped[datetime] = _created()
+
+
+class QuestionBank(Base):
+    """Reactivo versionado. Reimportar con cambios crea ``version`` + 1; un aprobado es inmutable."""
+
+    __tablename__ = "question_bank"
     __table_args__ = (
-        UniqueConstraint("subject_id", "external_id", "version"),
-        UniqueConstraint("id", "institution_id", name="uq_questions_id_tenant"),
+        UniqueConstraint("course_id", "external_id", "version"),
+        _tenant_uq("question_bank"),
         CheckConstraint("version >= 1", name="version_positive"),
-        CheckConstraint("source_page >= 1", name="source_page_positive"),
+        CheckConstraint("source_page IS NULL OR source_page >= 1", name="source_page_positive"),
         CheckConstraint(
             "status NOT IN ('reviewed','approved') OR (reviewer IS NOT NULL AND reviewed_at IS NOT NULL)",
             name="reviewed_requires_reviewer",
         ),
-        ForeignKeyConstraint(["subject_id", "institution_id"], ["subjects.id", "subjects.institution_id"]),
-        ForeignKeyConstraint(["module_id", "institution_id"], ["subject_modules.id", "subject_modules.institution_id"]),
-        ForeignKeyConstraint(["source_id", "institution_id"], ["subject_sources.id", "subject_sources.institution_id"]),
-        Index("ix_questions_subject_status_module", "subject_id", "status", "module_id"),
+        _fk(["course_id", "university_id"], "courses"),
+        _fk(["source_id", "university_id"], "course_sources"),
+        _fk(["import_id", "university_id"], "question_imports"),
+        Index("ix_question_bank_course_status_module", "course_id", "status", "module_number"),
+        Index("ix_question_bank_course_group", "course_id", "conceptual_group"),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    module_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    university_id: Mapped[uuid.UUID] = _tenant()
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    import_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    bank_code: Mapped[str] = mapped_column(String(64), nullable=False)
     external_id: Mapped[str] = mapped_column(String(64), nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    module_number: Mapped[int] = mapped_column(Integer, nullable=False)
     topic: Mapped[str] = mapped_column(String(200), nullable=False)
     bloom: Mapped[str] = mapped_column(BLOOM, nullable=False)
     difficulty: Mapped[str] = mapped_column(DIFFICULTY, nullable=False)
     stem: Mapped[str] = mapped_column(Text, nullable=False)
     rationale: Mapped[str] = mapped_column(Text, nullable=False)
     source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    source_page: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     conceptual_group: Mapped[str] = mapped_column(String(64), nullable=False)
+    variant: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    case_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(QUESTION_STATUS, nullable=False, server_default=text("'draft'"))
     checksum: Mapped[str] = mapped_column(String(64), nullable=False)
-    author: Mapped[str] = mapped_column(String(200), nullable=False)
     reviewer: Mapped[str | None] = mapped_column(String(200), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = _created()
+
+
+# Solo una versión vigente por reactivo.
+Index(
+    "uq_question_bank_one_current",
+    QuestionBank.course_id,
+    QuestionBank.external_id,
+    unique=True,
+    postgresql_where=text("is_current"),
+)
 
 
 class QuestionOption(Base):
     __tablename__ = "question_options"
     __table_args__ = (
         UniqueConstraint("question_id", "option_code"),
-        UniqueConstraint("id", "institution_id", name="uq_question_options_id_tenant"),
+        _tenant_uq("question_options"),
         CheckConstraint("option_code IN ('A','B','C','D')", name="option_code_abcd"),
-        ForeignKeyConstraint(
-            ["question_id", "institution_id"],
-            ["questions.id", "questions.institution_id"],
-            ondelete="CASCADE",
-        ),
-        # A lo sumo una correcta por reactivo; "exactamente una y 4 opciones" lo valida el importador
-        # y el trigger de aprobación (migración 0001).
-        Index(
-            "uq_question_options_one_correct",
-            "question_id",
-            unique=True,
-            postgresql_where=text("is_correct"),
-        ),
+        _fk(["question_id", "university_id"], "question_bank", ondelete="CASCADE"),
+        Index("uq_question_options_one_correct", "question_id", unique=True, postgresql_where=text("is_correct")),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
+    university_id: Mapped[uuid.UUID] = _tenant()
     question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     option_code: Mapped[str] = mapped_column(String(1), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
 
-class BankPublication(Base):
-    """Versión congelada del banco aprobado de una materia (regla 6 del ADR-001)."""
+# ------------------------------------------------------------------ exámenes ---
 
-    __tablename__ = "bank_publications"
+
+class Exam(Base):
+    """Examen (p. ej. Parcial 1) de una materia con fecha, código de acceso y reglas congeladas.
+
+    ``access_code_lookup`` = HMAC-SHA256(pepper, código normalizado): permite ubicar el examen por
+    código sin guardar el código en claro.
+    """
+
+    __tablename__ = "exams"
     __table_args__ = (
-        UniqueConstraint("subject_id", "version"),
-        UniqueConstraint("id", "institution_id", name="uq_bank_publications_id_tenant"),
-        ForeignKeyConstraint(["subject_id", "institution_id"], ["subjects.id", "subjects.institution_id"]),
-    )
-    id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
-    question_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    checksum: Mapped[str] = mapped_column(String(64), nullable=False)
-    published_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("administrators.id"), nullable=False)
-    published_at: Mapped[datetime] = _created()
-
-
-class BankPublicationQuestion(Base):
-    __tablename__ = "bank_publication_questions"
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["publication_id", "institution_id"], ["bank_publications.id", "bank_publications.institution_id"]
-        ),
-        ForeignKeyConstraint(["question_id", "institution_id"], ["questions.id", "questions.institution_id"]),
-    )
-    publication_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
-
-
-# ------------------------------------------------------------ convocatorias ---
-
-
-class ExamVersion(Base):
-    """Convocatoria (p. ej. A/B). ``config`` = parámetros congelados al abrir: tamaño, cuotas, tiempo,
-    scoring, ventana y tolerancia de red. ``access_code_hash`` nunca guarda el código en claro."""
-
-    __tablename__ = "exam_versions"
-    __table_args__ = (
-        UniqueConstraint("subject_id", "code"),
-        UniqueConstraint("id", "institution_id", name="uq_exam_versions_id_tenant"),
+        UniqueConstraint("course_id", "code"),
+        _tenant_uq("exams"),
         CheckConstraint("ends_at > starts_at", name="window_valid"),
-        ForeignKeyConstraint(["subject_id", "institution_id"], ["subjects.id", "subjects.institution_id"]),
-        ForeignKeyConstraint(
-            ["publication_id", "institution_id"], ["bank_publications.id", "bank_publications.institution_id"]
-        ),
+        CheckConstraint("status <> 'published' OR access_code_lookup IS NOT NULL", name="published_has_code"),
+        _fk(["course_id", "university_id"], "courses"),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    subject_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    publication_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    university_id: Mapped[uuid.UUID] = _tenant()
+    course_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     code: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    access_code_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
+    status: Mapped[str] = mapped_column(EXAM_STATUS, nullable=False, server_default=text("'draft'"))
+    access_code_lookup: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     config_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = _created()
 
 
-class ExamVersionPool(Base):
-    __tablename__ = "exam_version_pool"
+class ExamQuestion(Base):
+    """Pool congelado al publicar: versiones exactas de los reactivos aprobados (regla 6)."""
+
+    __tablename__ = "exam_questions"
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["exam_version_id", "institution_id"], ["exam_versions.id", "exam_versions.institution_id"]
-        ),
-        ForeignKeyConstraint(["question_id", "institution_id"], ["questions.id", "questions.institution_id"]),
+        _fk(["exam_id", "university_id"], "exams"),
+        _fk(["question_id", "university_id"], "question_bank"),
     )
-    exam_version_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    allocation_tag: Mapped[str | None] = mapped_column(String(32), nullable=True)
-
-
-class ExamVersionRoster(Base):
-    """Matrículas autorizadas en una convocatoria (control de acceso de ADR-004)."""
-
-    __tablename__ = "exam_version_roster"
-    __table_args__ = (
-        CheckConstraint("allowed_attempts >= 1", name="allowed_attempts_positive"),
-        ForeignKeyConstraint(
-            ["exam_version_id", "institution_id"], ["exam_versions.id", "exam_versions.institution_id"]
-        ),
-        ForeignKeyConstraint(["student_id", "institution_id"], ["students.id", "students.institution_id"]),
-    )
-    exam_version_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    student_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    allowed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    university_id: Mapped[uuid.UUID] = _tenant()
 
 
 # ----------------------------------------------------------------- intentos ---
 
 
-class ExamSession(Base):
-    """Intento de un alumno. Unicidad (convocatoria, alumno, n.º intento) impide reintentos no autorizados."""
+class ExamAttempt(Base):
+    """Intento. Unicidad (examen, alumno, n.º) impide reintentos sin autorización auditada."""
 
-    __tablename__ = "exam_sessions"
+    __tablename__ = "exam_attempts"
     __table_args__ = (
-        UniqueConstraint("exam_version_id", "student_id", "attempt_number"),
-        UniqueConstraint("id", "institution_id", name="uq_exam_sessions_id_tenant"),
+        UniqueConstraint("exam_id", "student_id", "attempt_number"),
+        _tenant_uq("exam_attempts"),
         CheckConstraint("attempt_number >= 1", name="attempt_number_positive"),
-        ForeignKeyConstraint(
-            ["exam_version_id", "institution_id"], ["exam_versions.id", "exam_versions.institution_id"]
-        ),
-        ForeignKeyConstraint(["student_id", "institution_id"], ["students.id", "students.institution_id"]),
-        Index("ix_exam_sessions_version_status", "exam_version_id", "status"),
+        _fk(["exam_id", "university_id"], "exams"),
+        _fk(["student_id", "university_id"], "students"),
+        Index("ix_exam_attempts_exam_status", "exam_id", "status"),
     )
     id: Mapped[uuid.UUID] = _pk()
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    exam_version_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    university_id: Mapped[uuid.UUID] = _tenant()
+    exam_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     student_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
-    status: Mapped[str] = mapped_column(SESSION_STATUS, nullable=False, server_default=text("'in_progress'"))
+    full_name_entered: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(ATTEMPT_STATUS, nullable=False, server_default=text("'in_progress'"))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     window_deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -397,57 +395,49 @@ class ExamSession(Base):
     row_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
 
 
-class ExamSessionQuestion(Base):
-    """Selección inmutable de preguntas del intento, con orden de opciones y deadline del servidor."""
+class AttemptQuestion(Base):
+    """Selección inmutable del intento, con orden de opciones y deadline del servidor."""
 
-    __tablename__ = "exam_session_questions"
+    __tablename__ = "attempt_questions"
     __table_args__ = (
-        UniqueConstraint("session_id", "question_id"),
+        UniqueConstraint("attempt_id", "question_id"),
         CheckConstraint("ordinal >= 1", name="ordinal_positive"),
         CheckConstraint("deadline_at IS NULL OR served_at IS NOT NULL", name="deadline_requires_served"),
-        ForeignKeyConstraint(
-            ["session_id", "institution_id"],
-            ["exam_sessions.id", "exam_sessions.institution_id"],
-            ondelete="CASCADE",
-        ),
-        ForeignKeyConstraint(["question_id", "institution_id"], ["questions.id", "questions.institution_id"]),
-        Index("ix_exam_session_questions_question", "question_id"),
+        _fk(["attempt_id", "university_id"], "exam_attempts", ondelete="CASCADE"),
+        _fk(["question_id", "university_id"], "question_bank"),
+        Index("ix_attempt_questions_question", "question_id"),
     )
-    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    attempt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
+    university_id: Mapped[uuid.UUID] = _tenant()
     question_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     module_number: Mapped[int] = mapped_column(Integer, nullable=False)
     options_order: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     served_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    state: Mapped[str] = mapped_column(SQ_STATE, nullable=False, server_default=text("'pending'"))
+    state: Mapped[str] = mapped_column(AQ_STATE, nullable=False, server_default=text("'pending'"))
 
 
-class Answer(Base):
-    """Una respuesta por (intento, ordinal). ``idempotency_key`` hace seguros los reintentos de red."""
+class AttemptAnswer(Base):
+    """Una respuesta por (intento, ordinal); ``idempotency_key`` vuelve seguros los reintentos de red."""
 
-    __tablename__ = "answers"
+    __tablename__ = "attempt_answers"
     __table_args__ = (
-        UniqueConstraint("session_id", "ordinal"),
-        UniqueConstraint("session_id", "idempotency_key"),
+        UniqueConstraint("attempt_id", "ordinal"),
+        UniqueConstraint("attempt_id", "idempotency_key"),
         CheckConstraint(
-            "(outcome IN ('correct','wrong')) = (selected_option_id IS NOT NULL)",
-            name="selection_matches_outcome",
+            "(outcome IN ('correct','wrong')) = (selected_option_id IS NOT NULL)", name="selection_matches_outcome"
         ),
         ForeignKeyConstraint(
-            ["session_id", "ordinal"],
-            ["exam_session_questions.session_id", "exam_session_questions.ordinal"],
+            ["attempt_id", "ordinal"],
+            ["attempt_questions.attempt_id", "attempt_questions.ordinal"],
             ondelete="CASCADE",
         ),
-        ForeignKeyConstraint(
-            ["selected_option_id", "institution_id"],
-            ["question_options.id", "question_options.institution_id"],
-        ),
+        _fk(["selected_option_id", "university_id"], "question_options"),
     )
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
-    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    university_id: Mapped[uuid.UUID] = _tenant()
+    attempt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     selected_option_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     outcome: Mapped[str] = mapped_column(OUTCOME, nullable=False)
@@ -455,16 +445,16 @@ class Answer(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
-class ExamResult(Base):
-    __tablename__ = "exam_results"
+class AttemptResult(Base):
+    __tablename__ = "attempt_results"
     __table_args__ = (
         CheckConstraint("correct >= 0 AND wrong >= 0 AND omitted >= 0 AND expired >= 0", name="counts_nonneg"),
         CheckConstraint("correct + wrong + omitted + expired = total", name="counts_sum_total"),
         CheckConstraint("grade >= 0 AND grade <= 100", name="grade_range"),
-        ForeignKeyConstraint(["session_id", "institution_id"], ["exam_sessions.id", "exam_sessions.institution_id"]),
+        _fk(["attempt_id", "university_id"], "exam_attempts"),
     )
-    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
-    institution_id: Mapped[uuid.UUID] = _tenant()
+    attempt_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    university_id: Mapped[uuid.UUID] = _tenant()
     total: Mapped[int] = mapped_column(Integer, nullable=False)
     correct: Mapped[int] = mapped_column(Integer, nullable=False)
     wrong: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -480,14 +470,14 @@ class AuditEvent(Base):
     """Bitácora append-only (sin claves ni secretos en ``metadata``)."""
 
     __tablename__ = "audit_events"
-    __table_args__ = (Index("ix_audit_events_session", "session_id"),)
+    __table_args__ = (Index("ix_audit_events_attempt", "attempt_id"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    institution_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("institutions.id"), nullable=True, index=True
+    university_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("universities.id"), nullable=True, index=True
     )
     actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    actor_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    session_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     occurred_at: Mapped[datetime] = _created()
     event_metadata: Mapped[dict[str, Any]] = mapped_column(
@@ -495,24 +485,29 @@ class AuditEvent(Base):
     )
 
 
-# Tablas sujetas a Row-Level Security (todas salvo institutions; administrators y audit_events
-# tienen política especial porque admiten institution_id NULL).
+class AccessThrottle(Base):
+    """Contador de intentos de ingreso por clave (IP o matrícula) y ventana; sin RLS (previo al tenant)."""
+
+    __tablename__ = "access_throttle"
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+
+
 TENANT_TABLES: tuple[str, ...] = (
-    "subjects",
-    "subject_modules",
-    "subject_sources",
-    "administrator_subjects",
+    "courses",
+    "course_modules",
+    "course_sources",
+    "administrator_courses",
     "students",
-    "questions",
+    "question_imports",
+    "question_bank",
     "question_options",
-    "bank_publications",
-    "bank_publication_questions",
-    "exam_versions",
-    "exam_version_pool",
-    "exam_version_roster",
-    "exam_sessions",
-    "exam_session_questions",
-    "answers",
-    "exam_results",
+    "exams",
+    "exam_questions",
+    "exam_attempts",
+    "attempt_questions",
+    "attempt_answers",
+    "attempt_results",
 )
 NULLABLE_TENANT_TABLES: tuple[str, ...] = ("administrators", "audit_events")

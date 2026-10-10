@@ -16,15 +16,18 @@ Build, test, version and deploy a production-ready, Spanish-language MBA assessm
 
 ## Architecture decisions (override older text in docs)
 - ADR-001: Azure Database for PostgreSQL Flexible Server + SQLAlchemy 2 + Alembic (no Azure SQL).
-- ADR-002: API in Azure Functions Python 3.12 (v2 model, Flex Consumption).
+- ADR-002: API in FastAPI (Python 3.12) on Azure App Service Linux B1 (supersedes Functions).
 - ADR-003: multi-university, multi-subject platform with PostgreSQL Row-Level Security; SIAF is the first subject. No subject-specific values hard-coded.
-- ADR-004: student access = university code + matrícula + convocatoria code against a roster (identity not verified; documented risk).
+- ADR-004: student access = exam access code + full name + matrícula, free registration, one attempt per matrícula (identity not verified; documented risk).
+- ADR-005: teachers log in with username + password (Argon2id, lockout, HttpOnly session cookie, CSRF header).
+- ADR-006: UDL master bank format; 200 per attempt = 50 per module, balanced 2 variants per conceptual group (operator decision; risks in bank quality report).
+- Table names follow INSTRUCCIONES (UDL): universities, courses, exams, question_bank, question_options, exam_attempts, attempt_questions, attempt_answers, audit_events.
 - The operator runs every `git push` and `az` command manually; Claude provides commands one at a time and verifies output.
 
 ## Workflow
 1. Inspect repository and PDFs; inventory available Azure tooling, credentials and repo access; report gaps.
 2. Produce implementation plan and cost estimate. Ask for approvals on Azure actions.
-3. Scaffold React/Vite/TypeScript, Azure Functions (Python 3.12), PostgreSQL migrations (Alembic) and tests.
+3. Scaffold React/Vite/TypeScript, FastAPI (Python 3.12), PostgreSQL migrations (Alembic) and tests.
 4. Implement secure admin import and bank QA, student exam engine and admin reporting.
 5. Generate academic question bank in reviewable batches, verify 480 unique approved items; import only after teacher approval.
 6. Run tests and security checks; prepare IaC and CI/CD; deploy after explicit approval.

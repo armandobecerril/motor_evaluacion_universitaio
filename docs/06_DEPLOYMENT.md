@@ -6,7 +6,7 @@ Tenant, subscription ID, resource group, región (aprobada: South Central US), r
 ## Flujo recomendado
 1. Verificar `node --version`, `az --version`, `az account show`, `gh auth status` SIN imprimir secretos.
 2. Preparar monorepo, `.gitignore`, `.env.example`, tests y `infra/main.bicep` parametrizado.
-3. Estimar precios de Static Web Apps, Functions (Flex Consumption), Azure Database for PostgreSQL Flexible Server, Insights y tráfico; pedir aprobación. Ver `docs/00_AUDITORIA_H0.md`.
+3. Estimar precios de Static Web Apps, App Service B1 (FastAPI), Azure Database for PostgreSQL Flexible Server, Insights y tráfico; pedir aprobación. Ver `docs/00_AUDITORIA_H0.md`.
 4. Configurar entornos `dev` y `prod`, migraciones idempotentes y seed de prueba solo en dev.
 5. Crear workflow de CI: lint, typecheck, unit tests, integración, E2E, revisión de dependencias, validación de Bicep.
 6. Configurar CD con permisos mínimos y federación OIDC; requerir aprobación para prod.

@@ -1,26 +1,26 @@
 {
-  "institution": { "code": "DEMO", "name": "Universidad de demostración (sustituir por la real)" },
-  "subject": {
+  "university": { "code": "UDL", "name": "UDL" },
+  "course": {
     "code": "SIAF",
     "name": "Sistemas Informáticos Aplicados a Finanzas",
     "config": {
       "modules_count": 4,
-      "bank_target_per_module": 120,
-      "exam_size": 200,
+      "questions_per_attempt": 200,
       "per_module_quota": 50,
+      "max_variants_per_group": 2,
+      "selection": "balanced_by_group",
       "seconds_per_question": 20,
-      "scoring": { "correct": 1, "wrong": -1, "omitted": 0, "expired": 0, "min_grade": 0, "max_grade": 100 },
-      "window_minutes": 80,
       "network_tolerance_ms": 0,
-      "bloom_quota": { "recordar_comprender": 0.15, "aplicar": 0.25, "analizar": 0.30, "evaluar": 0.30 },
-      "avoid_repeated_conceptual_group": true,
-      "allow_skip": true
+      "window_minutes": 80,
+      "scoring": { "correct": 1, "wrong": -1, "omitted": 0, "expired": 0, "min_grade": 0, "max_grade": 100 },
+      "allow_skip": true,
+      "attempts_per_student": 1
     },
     "modules": [
-      { "module_number": 1, "name": "Sistemas de Información en la Función Financiera", "bank_target": 120 },
-      { "module_number": 2, "name": "Arquitectura Empresarial", "bank_target": 120 },
-      { "module_number": 3, "name": "El ERP", "bank_target": 120 },
-      { "module_number": 4, "name": "Automatización Financiera", "bank_target": 120 }
+      { "module_number": 1, "name": "Sistemas de Información en la Función Financiera" },
+      { "module_number": 2, "name": "Arquitectura Empresarial" },
+      { "module_number": 3, "name": "El ERP" },
+      { "module_number": 4, "name": "Automatización Financiera" }
     ],
     "sources": [
       { "file_name": "01_Sistemas-de-Informacion-en-la-Funcion-Financiera.pdf", "page_count": 15, "usage": "question_source", "module_number": 1 },

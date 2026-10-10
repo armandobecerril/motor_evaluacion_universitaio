@@ -1,46 +1,39 @@
 # 03 — Modelo de datos y contratos
 
-> Fuente de verdad: `apps/api/exam_engine/models.py` y `apps/api/migrations/`. PostgreSQL (ADR-001), multi-universidad (ADR-003).
+> Fuente de verdad: `apps/api/exam_engine/models.py` y `apps/api/migrations/`. PostgreSQL (ADR-001), multi-universidad (ADR-003). Nombres de tabla según INSTRUCCIONES (UDL).
 
 ## Tablas
 **Catálogo**
-- `institutions`: id, code UNIQUE, name, active. (Sin RLS: se usa para resolver la universidad al ingresar.)
-- `subjects`: institution_id, code, name, `config` JSONB (parámetros por defecto), UNIQUE(institution_id, code).
-- `subject_modules`: subject_id, module_number, name, bank_target (p. ej. 120), UNIQUE(subject_id, module_number).
-- `subject_sources`: PDF autorizados por materia: file_name, page_count, usage (`question_source` | `scenario_inspiration`), copyright_restricted.
+- `universities`: code UNIQUE, name, active. (Sin RLS.)
+- `courses` (materias): university_id, code, name, `config` JSONB (parámetros por defecto de exámenes); UNIQUE(university_id, code).
+- `course_modules`: module_number, name; UNIQUE(course_id, module_number).
+- `course_sources`: PDF autorizados: file_name, page_count, module_number, usage (`question_source` | `scenario_inspiration`), copyright_restricted.
 
 **Personas**
-- `administrators`: entra_object_id UNIQUE, email, display_name, role (`platform_admin` | `institution_admin` | `teacher`); institution_id NULL solo para platform_admin.
-- `administrator_subjects`: alcance de cada docente por materia.
-- `students`: matricula, full_name, email, group_name; UNIQUE(institution_id, matricula). PII mínima.
+- `administrators`: username UNIQUE, password_hash (Argon2id), must_change_password, entra_object_id (opcional), role (`platform_admin` | `university_admin` | `teacher`), failed_logins, locked_until; university_id NULL solo para platform_admin.
+- `administrator_courses`: alcance de cada docente. `admin_sessions`: hash del token de sesión, expiración, revocación.
+- `students`: matrícula + nombre; UNIQUE(university_id, matricula). Se crea al primer ingreso (registro libre).
 
 **Banco**
-- `questions`: subject_id, module_id, external_id, version, topic, bloom, difficulty, stem, rationale, source_id, source_page, conceptual_group, status (`draft`→`reviewed`→`approved`→`retired`), checksum, author, reviewer, reviewed_at; UNIQUE(subject_id, external_id, version).
-- `question_options`: option_code A–D, text, is_correct (solo BD/API admin); UNIQUE(question_id, option_code); índice único parcial: máx. 1 correcta.
-- `bank_publications` + `bank_publication_questions`: versión congelada del banco aprobado de una materia.
+- `question_imports`: cada archivo importado (bank_code, sha256, `source_metadata` sin alterar, conteos, quién y cuándo).
+- `question_bank`: external_id, version, is_current (índice único parcial: una vigente por id), module_number, topic, bloom, difficulty, stem, rationale, source_id, source_page (nullable), conceptual_group, variant, case_type, status (`draft`→`reviewed`→`approved`→`retired`), checksum, reviewer, reviewed_at.
+- `question_options`: A–D, text, is_correct (solo BD/API docente); máx. 1 correcta (índice parcial).
 
-**Convocatorias e intentos**
-- `exam_versions` (convocatorias A/B…): subject_id, publication_id, code, ventana starts_at/ends_at, enabled, access_code_hash, `config` JSONB congelado, config_version.
-- `exam_version_pool`: preguntas asignadas a la convocatoria (allocation_tag) — permite pools disjuntos A/B.
-- `exam_version_roster`: matrículas autorizadas, allowed_attempts.
-- `exam_sessions` (intentos): student_id, exam_version_id, attempt_number, status, started_at, window_deadline_at, finished_at, current_ordinal, seed, config_snapshot, token_hash UNIQUE, row_version; UNIQUE(exam_version_id, student_id, attempt_number).
-- `exam_session_questions`: (session_id, ordinal) PK, question_id, module_number, options_order, served_at, deadline_at, state; UNIQUE(session_id, question_id).
-- `answers`: UNIQUE(session_id, ordinal), UNIQUE(session_id, idempotency_key), outcome (`correct`,`wrong`,`omitted`,`expired`), selected_option_id coherente con outcome. Append-only.
-- `exam_results`: total, correct, wrong, omitted, expired, raw_score, grade (0–100), scoring_version; CHECK suma = total.
-- `audit_events`: actor_type, actor_id, session_id, event_type, occurred_at, metadata (sin claves ni secretos). Append-only.
+**Exámenes e intentos**
+- `exams`: course_id, code (p. ej. PARCIAL-1), name, starts_at/ends_at, status (`draft`/`published`/`closed`/`cancelled`), `access_code_lookup` (HMAC del código, UNIQUE), `config` JSONB congelado, published_at/by.
+- `exam_questions`: pool congelado al publicar (versiones exactas de reactivos aprobados).
+- `exam_attempts`: student_id, attempt_number, full_name_entered, status, started_at, window_deadline_at, finished_at, current_ordinal, seed, config_snapshot, token_hash UNIQUE, row_version; UNIQUE(exam_id, student_id, attempt_number).
+- `attempt_questions`: (attempt_id, ordinal) PK, question_id, module_number, options_order, served_at, deadline_at, state; UNIQUE(attempt_id, question_id).
+- `attempt_answers`: UNIQUE(attempt_id, ordinal), UNIQUE(attempt_id, idempotency_key), outcome, selected_option_id coherente. Append-only.
+- `attempt_results`: total, correct, wrong, omitted, expired, raw_score, grade (0–100); CHECK suma = total.
+- `audit_events`: actor, attempt_id, event_type, metadata (sin claves ni secretos). Append-only.
+- `access_throttle`: contadores por ventana para límites de intentos de ingreso.
 
 ## Integridad aplicada por la base
-- RLS FORCE en todas las tablas con `institution_id`; llaves foráneas compuestas `(id, institution_id)`.
-- Trigger: solo se aprueba un reactivo con exactamente 4 opciones y 1 correcta, y con reviewer + reviewed_at.
-- Trigger: un reactivo aprobado es inmutable (salvo pasar a `retired`); sus opciones también. Correcciones = nueva versión.
-- Triggers append-only en `answers` y `audit_events`.
+- RLS FORCE en tablas con `university_id`; llaves foráneas compuestas `(id, university_id)`.
+- Trigger: un reactivo solo se aprueba con 4 opciones, 1 correcta, reviewer y reviewed_at; aprobado ⇒ inmutable (salvo pasar a `retired` o dejar de ser vigente); sus opciones también.
+- Triggers append-only en `attempt_answers` y `audit_events`.
 
 ## Contratos
-- `studentQuestionDTO`: id opaco, texto, opciones reordenadas (sin `is_correct`), ordinal, deadline del servidor.
-- El importador rechaza IDs duplicados, páginas inexistentes (`source_page` > `page_count`), fuentes fuera de `subject_sources`, fuentes de uso `scenario_inspiration` como cita, ambigüedad marcada y reactivos sin revisión. Importación en staging + transacción.
-- `source_pdf`/`source_page` no se publican al estudiante.
-
-## Ejemplo de reactivo (solo ilustrativo, no cuenta en los 480)
-```json
-{"id":"MBA-SIAF-DEMO-0001","module":4,"topic":"RPA vs API","bloom":"evaluar","difficulty":"media","stem":"Dos sistemas modernos ofrecen APIs estables. ¿Qué integración conviene evaluar primero?","options":[{"id":"A","text":"Un bot que copie datos"},{"id":"B","text":"Una API entre sistemas"},{"id":"C","text":"Una hoja manual"},{"id":"D","text":"Reemplazar ambos sistemas"}],"correct_option_id":"B","rationale":"API-first cuando exista una integración adecuada.","source_pdf":"04_AUTOMATIZACION-FINANCIERA.pdf","source_page":10,"conceptual_group":"API_FIRST","status":"draft"}
-```
+- DTO de alumno: id opaco, enunciado, opciones reordenadas (sin `is_correct`), ordinal, deadline del servidor. Nunca `rationale`, `correct_option_id`, `source_*`.
+- Formato del banco e importación: ver ADR-006.

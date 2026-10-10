@@ -1,6 +1,6 @@
 """Engine de SQLAlchemy con pool limitado y contexto de universidad (RLS).
 
-Cada unidad de trabajo abre una transacción y fija ``app.institution_id`` con
+Cada unidad de trabajo abre una transacción y fija ``app.university_id`` con
 ``set_config(..., is_local => true)``: el valor vive solo dentro de la transacción,
 así una conexión reutilizada del pool nunca hereda el tenant de otra petición.
 """
@@ -47,10 +47,10 @@ def reset_engine() -> None:
 
 
 @contextmanager
-def tenant_session(institution_id: uuid.UUID | None, *, platform_admin: bool = False) -> Iterator[Session]:
+def tenant_session(university_id: uuid.UUID | None, *, platform_admin: bool = False) -> Iterator[Session]:
     """Transacción atómica con contexto RLS.
 
-    - ``institution_id``: universidad del actor; las políticas RLS filtran por este valor.
+    - ``university_id``: universidad del actor; las políticas RLS filtran por este valor.
     - ``platform_admin``: solo para endpoints de administración de plataforma (acceso entre universidades).
     """
     get_engine()
@@ -59,10 +59,8 @@ def tenant_session(institution_id: uuid.UUID | None, *, platform_admin: bool = F
     try:
         with session.begin():
             session.execute(
-                text(
-                    "SELECT set_config('app.institution_id', :tid, true), set_config('app.platform_admin', :pa, true)"
-                ),
-                {"tid": str(institution_id) if institution_id else "", "pa": "on" if platform_admin else "off"},
+                text("SELECT set_config('app.university_id', :tid, true), set_config('app.platform_admin', :pa, true)"),
+                {"tid": str(university_id) if university_id else "", "pa": "on" if platform_admin else "off"},
             )
             yield session
     finally:

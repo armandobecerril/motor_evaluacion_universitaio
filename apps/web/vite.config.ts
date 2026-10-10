@@ -5,8 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    // En local, la API de Functions corre en :7071 (func start).
-    proxy: { '/api': 'http://localhost:7071' },
+    // En local, la API FastAPI corre en :8000 (uvicorn).
+    proxy: { '/api': 'http://localhost:8000' },
   },
   build: { sourcemap: false },
   test: {

@@ -5,17 +5,18 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
-import azure.functions as func
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from .. import db
 from ..config import get_settings
-from .responses import json_response
 
-bp = func.Blueprint()
+router = APIRouter()
 log = logging.getLogger(__name__)
 
 
-def health_payload() -> tuple[dict[str, object], int]:
+@router.get("/health")
+def health() -> JSONResponse:
     s = get_settings()
     payload: dict[str, object] = {
         "status": "ok",
@@ -33,10 +34,4 @@ def health_payload() -> tuple[dict[str, object], int]:
     status = 200 if payload["database"] == "ok" else 503
     if status != 200:
         payload["status"] = "degraded"
-    return payload, status
-
-
-@bp.route(route="health", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
-def health(req: func.HttpRequest) -> func.HttpResponse:
-    body, status = health_payload()
-    return json_response(body, status)
+    return JSONResponse(payload, status_code=status)

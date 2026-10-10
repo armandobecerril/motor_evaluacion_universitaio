@@ -24,6 +24,21 @@ class Settings(BaseSettings):
     db_pool_timeout_s: int = Field(default=10, alias="DB_POOL_TIMEOUT_S", ge=1, le=60)
     db_statement_timeout_ms: int = Field(default=5000, alias="DB_STATEMENT_TIMEOUT_MS", ge=100)
 
+    # Secreto para HMAC de códigos de acceso (Key Vault en Azure). Cambiarlo invalida los códigos vigentes.
+    access_code_pepper: SecretStr = Field(alias="ACCESS_CODE_PEPPER")
+
+    # Sesiones de docentes
+    admin_session_hours: int = Field(default=8, alias="ADMIN_SESSION_HOURS", ge=1, le=24)
+    admin_max_failed_logins: int = Field(default=5, alias="ADMIN_MAX_FAILED_LOGINS", ge=3, le=20)
+    admin_lockout_minutes: int = Field(default=15, alias="ADMIN_LOCKOUT_MINUTES", ge=1, le=1440)
+
+    # Límite de carga del banco
+    max_bank_upload_bytes: int = Field(default=5_000_000, alias="MAX_BANK_UPLOAD_BYTES", ge=10_000)
+
+    @property
+    def is_local(self) -> bool:
+        return self.environment == "local"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

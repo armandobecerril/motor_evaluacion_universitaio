@@ -12,10 +12,14 @@ extend-exclude = ["migrations/versions"]
 select = ["E", "F", "W", "I", "B", "UP", "S", "BLE"]
 ignore = ["S101"]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106", "S608"]
+"tests/*" = ["S105", "S106", "S107", "S608", "E501"]
 "migrations/*" = ["S608"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning:httpx"]

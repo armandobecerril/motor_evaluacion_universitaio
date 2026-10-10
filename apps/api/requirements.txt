@@ -1,7 +1,11 @@
-# Runtime de Azure Functions (Python 3.12). Versiones fijadas.
-azure-functions==1.21.3
+# API FastAPI (Python 3.12) en Azure App Service. Versiones fijadas.
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+gunicorn==23.0.0
+python-multipart==0.0.19
 SQLAlchemy==2.0.36
 alembic==1.14.0
 psycopg[binary]==3.2.3
 pydantic==2.10.3
 pydantic-settings==2.6.1
+argon2-cffi==23.1.0

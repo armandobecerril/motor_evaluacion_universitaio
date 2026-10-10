@@ -1,16 +1,17 @@
-# ADR-002 — Backend en Azure Functions con Python
+# ADR-002 — Backend en Python: FastAPI en Azure App Service
 
-- **Estado:** aceptado (2026-10-09)
-- **Reemplaza:** Azure Functions TypeScript
+- **Estado:** aceptado (2026-10-10). Sustituye la versión del 2026-10-09 (Azure Functions Python), que a su vez reemplazó a Functions TypeScript.
 
 ## Decisión
-API en **Azure Functions, Python 3.12, modelo de programación v2**, plan **Flex Consumption**. El frontend se mantiene en React + Vite + TypeScript (Azure Static Web Apps con backend vinculado).
+API en **FastAPI (Python 3.12)** sobre **Azure App Service Linux (plan B1)**, servida con `gunicorn -k uvicorn.workers.UvicornWorker`. Frontend React + Vite + TypeScript en Azure Static Web Apps (Standard) con la App Service como backend vinculado.
 
 ## Motivo
-ADR-001 exige SQLAlchemy 2 y Alembic (Python). Mantener TypeScript implicaría dos lenguajes en el backend o abandonar Alembic.
+- ADR-001 exige SQLAlchemy 2 + Alembic (Python).
+- Un examen de 20 s por pregunta no tolera arranques en frío; App Service mantiene el proceso activo.
+- Pool de conexiones estable: 1 instancia × 2 workers × (pool 3 + overflow 2) = 10 conexiones ≪ 35 de B1ms.
+- Instrucciones del operador (INSTRUCCIONES_CLAUDE.md, UDL) piden FastAPI.
 
 ## Consecuencias
-- Contratos API: modelos Pydantic en el backend; los tipos TypeScript del frontend se mantienen manualmente en `apps/web/src/lib/api.ts` (o se generan desde OpenAPI en un hito posterior).
-- Pool por instancia: `DB_POOL_SIZE=3`, `DB_MAX_OVERFLOW=2`, máximo de instancias Flex = 6 en B1ms (6 × 5 = 30 < 35).
-- Arranque en frío: configurar 1 instancia "always ready" durante la ventana del examen.
-- Rol de BD de la app (`exam_app`) distinto del rol propietario de migraciones; sin DDL.
+- Costo fijo ~US$13/mes (B1) en lugar de Flex Consumption.
+- OpenAPI/Swagger solo en `APP_ENV=local`.
+- Rol de BD de la app (`exam_app`) distinto del propietario; sin DDL.

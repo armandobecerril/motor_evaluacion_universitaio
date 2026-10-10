@@ -41,6 +41,26 @@ describe('App', () => {
     expect(screen.getByLabelText('Código de convocatoria')).toBeDisabled();
   });
 
+  it('panel docente sin sesión muestra el formulario de acceso', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({ detail: 'Inicia sesión.' }) }));
+    renderAt('/admin');
+    expect(await screen.findByRole('heading', { name: 'Acceso docente' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Contraseña')).toHaveAttribute('type', 'password');
+  });
+
+  it('docente con contraseña temporal debe cambiarla', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ username: 'admin', display_name: 'Admin', role: 'platform_admin', must_change_password: true }),
+      }),
+    );
+    renderAt('/admin');
+    expect(await screen.findByRole('heading', { name: /contraseña temporal/i })).toBeInTheDocument();
+  });
+
   it('ruta desconocida muestra 404', () => {
     renderAt('/no-existe');
     expect(screen.getByText('Página no encontrada')).toBeInTheDocument();

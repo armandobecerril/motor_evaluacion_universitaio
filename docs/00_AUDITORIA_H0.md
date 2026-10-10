@@ -19,9 +19,11 @@ Los cuatro PDF de módulo tienen texto extraíble; no requieren OCR.
 | Tema | Decisión |
 |---|---|
 | Base de datos | PostgreSQL Flexible Server (ADR-001) |
-| Backend | Azure Functions Python 3.12 (ADR-002) |
+| Backend | FastAPI en App Service B1 (ADR-002, actualizado 2026-10-10; antes Functions Python) |
 | Alcance | Multi-universidad y multi-materia; SIAF primero (ADR-003) |
-| Acceso alumno | Universidad + matrícula + código de convocatoria (ADR-004, riesgo documentado) |
+| Acceso alumno | Código del examen + nombre completo + matrícula, registro libre (ADR-004, riesgo documentado) |
+| Acceso docente | Usuario y contraseña (ADR-005) |
+| Selección | 200 por intento, 50 por módulo, 2 casos por concepto (ADR-006) |
 | Región | South Central US |
 | Reglas de examen | Configurables por el docente; por defecto −1 por error, 80 min, 0 s de tolerancia |
 | Git / Azure | El operador ejecuta `git push` y `az` manualmente; repositorio `armandobecerril/motor_evaluacion_universitaio` |
@@ -41,9 +43,9 @@ Los cuatro PDF de módulo tienen texto extraíble; no requieren OCR.
 | PostgreSQL Flexible B1ms + 32 GiB | ~$12–15 + ~$4 |
 | Escalado a D2ds_v5 solo el día del examen | ~$1–3 por examen |
 | Static Web Apps Standard | $9 |
-| Functions Flex Consumption | ~$0–5 |
+| App Service Linux B1 (FastAPI) | ~$13 |
 | Application Insights, Key Vault, Storage | ~$1–3 |
-| **Total producción** | **~$30–40** |
+| **Total producción** | **~$40–50** |
 
 Desarrollo en local (sin costo Azure). El servidor PostgreSQL de producción puede detenerse entre periodos de examen (máximo 7 días por detención).
 
