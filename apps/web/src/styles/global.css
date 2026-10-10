@@ -1,0 +1,48 @@
+:root {
+  --navy-900: #0b1f3a;
+  --navy-700: #16325c;
+  --navy-500: #2a4f86;
+  --gray-50: #f6f7f9;
+  --gray-200: #dfe3e8;
+  --gray-500: #5f6b7a;
+  --gray-800: #1f2933;
+  --white: #ffffff;
+  --focus: #f2b705;
+  --radius: 8px;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: var(--gray-800);
+  background: var(--gray-50);
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--gray-50); }
+#root { display: flex; flex-direction: column; min-height: 100vh; }
+a { color: var(--navy-500); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.skip-link { position: absolute; left: -999px; top: 0; background: var(--white); padding: 8px 12px; }
+.skip-link:focus { left: 16px; z-index: 10; }
+.topbar {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 14px 24px; background: var(--navy-900); color: var(--white);
+}
+.topbar a { color: var(--white); text-decoration: none; }
+.topbar nav { display: flex; gap: 20px; }
+.brand { font-weight: 700; letter-spacing: 0.2px; }
+.container { flex: 1; width: 100%; max-width: 920px; margin: 0 auto; padding: 40px 16px; }
+.eyebrow { text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.12em; color: var(--gray-500); margin: 0 0 8px; }
+h1 { color: var(--navy-900); font-size: clamp(1.6rem, 3.5vw, 2.3rem); line-height: 1.2; margin: 0 0 16px; }
+.lead { font-size: 1.1rem; line-height: 1.6; max-width: 62ch; }
+.actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 24px 0; }
+.button {
+  display: inline-block; padding: 11px 18px; border-radius: var(--radius); border: 1px solid var(--navy-700);
+  background: var(--white); color: var(--navy-700); font-weight: 600; text-decoration: none; font-size: 1rem; cursor: pointer;
+}
+.button.primary { background: var(--navy-700); color: var(--white); }
+.button:disabled { opacity: 0.55; cursor: not-allowed; }
+.card { background: var(--white); border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 28px; }
+.narrow { max-width: 520px; }
+form { display: grid; gap: 14px; margin: 20px 0; }
+label { display: grid; gap: 6px; font-weight: 600; }
+input { font: inherit; padding: 10px 12px; border: 1px solid var(--gray-500); border-radius: 6px; }
+.muted, .status { color: var(--gray-500); }
+.footer { padding: 16px 24px; font-size: 0.85rem; color: var(--gray-500); border-top: 1px solid var(--gray-200); background: var(--white); }

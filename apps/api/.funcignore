@@ -1,0 +1,7 @@
+.venv/
+tests/
+.pytest_cache/
+.ruff_cache/
+local.settings.json
+local.settings.example.json
+requirements-dev.txt

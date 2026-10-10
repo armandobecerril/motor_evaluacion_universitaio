@@ -1,0 +1,28 @@
+# Dependencias y builds
+node_modules/
+dist/
+*.tsbuildinfo
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+coverage/
+playwright-report/
+test-results/
+
+# Secretos y configuración local (nunca al repo)
+.env
+.env.*
+!.env.example
+local.settings.json
+*.publishsettings
+*.publishprofile
+.azure/
+
+# Sistema
+.DS_Store
+
+# Materiales académicos con derechos: fuera de cualquier repositorio o despliegue
+source_materials/
+*.pdf
