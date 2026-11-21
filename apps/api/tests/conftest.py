@@ -24,6 +24,9 @@ from exam_engine.config import get_settings
 API_DIR = Path(__file__).resolve().parents[1]
 os.environ.setdefault("ACCESS_CODE_PEPPER", "pepper-solo-para-pruebas")
 os.environ.setdefault("APP_ENV", "local")
+# exam_engine.main crea la app al importarse (para gunicorn); al recolectar las pruebas ya necesita DATABASE_URL.
+if os.environ.get("TEST_DATABASE_URL"):
+    os.environ.setdefault("DATABASE_URL", os.environ["TEST_DATABASE_URL"])
 
 
 def _require(name: str) -> str:
