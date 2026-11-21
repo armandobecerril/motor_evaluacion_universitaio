@@ -368,6 +368,18 @@ def test_seed_adds_missing_modules_to_existing_course(admin, course, tmp_path):
     f.write_text(json.dumps(data), encoding="utf-8")
     assert "+1 módulos · +1 fuentes" in seed_catalog(f)
     assert seed_catalog(f).startswith("sin cambios")
+    # Módulo 5 aún sin reactivos: se puede corregir su nombre y reasignar la fuente.
+    data["course"]["modules"] = [{"module_number": 5, "name": "Nombre corregido"}, {"module_number": 6, "name": "Otro"}]
+    data["course"]["sources"][0]["module_number"] = 6
+    f.write_text(json.dumps(data), encoding="utf-8")
+    assert "+1 módulos · +0 fuentes · 2 corregidos" in seed_catalog(f)
+    # Módulo 1 ya tiene reactivos: su nombre NO se toca.
+    data["course"]["modules"] = [{"module_number": 1, "name": "Intento de renombrar"}]
+    data["course"]["sources"] = []
+    f.write_text(json.dumps(data), encoding="utf-8")
+    assert "sin tocar (ya tienen reactivos): módulo 1" in seed_catalog(f)
     cat = admin.get("/api/admin/catalog").json()
     entry = next(e for e in cat if e["course"]["id"] == str(course.id))
-    assert [m["number"] for m in entry["modules"]] == [1, 2, 3, 4, 5]
+    assert [m["number"] for m in entry["modules"]] == [1, 2, 3, 4, 5, 6]
+    assert entry["modules"][4]["name"] == "Nombre corregido"
+    assert entry["modules"][0]["name"] != "Intento de renombrar"

@@ -33,14 +33,18 @@
       },
       {
         "module_number": 6,
-        "name": "Del Business Intelligence al Business Analytics"
+        "name": "Business Intelligence: de los datos transaccionales a las decisiones financieras"
       },
       {
         "module_number": 7,
-        "name": "Business Analytics II: de los modelos a las decisiones"
+        "name": "Del Business Intelligence al Business Analytics"
       },
       {
         "module_number": 8,
+        "name": "Business Analytics II: de los modelos a las decisiones"
+      },
+      {
+        "module_number": 9,
         "name": "Inteligencia Artificial aplicada a Finanzas"
       }
     ],
@@ -52,28 +56,34 @@
         "module_number": 5
       },
       {
+        "file_name": "05_-Business-Intelligence-de-los-datos-transaccionales-a-las-decisiones-financieras-estrategicas.pptx",
+        "page_count": 30,
+        "usage": "question_source",
+        "module_number": 6
+      },
+      {
         "file_name": "06_Del-Business-Intelligence-al-Business-Analytics.pptx",
         "page_count": 23,
         "usage": "question_source",
-        "module_number": 6
+        "module_number": 7
       },
       {
         "file_name": "07_Business-Analytics-II-de-los-modelos-analiticos-a-las-decisiones-empresariales.pptx",
         "page_count": 12,
         "usage": "question_source",
-        "module_number": 7
+        "module_number": 8
       },
       {
         "file_name": "08_Inteligencia_Artificial.pptx",
         "page_count": 15,
         "usage": "question_source",
-        "module_number": 8
+        "module_number": 9
       },
       {
         "file_name": "08_Inteligencia_Artificial_Class.pptx",
         "page_count": 13,
         "usage": "question_source",
-        "module_number": 8
+        "module_number": 9
       }
     ]
   }
