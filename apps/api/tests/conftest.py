@@ -226,3 +226,15 @@ def make_bank(university: str, *, groups_per_module: int = 3, variants: int = 2,
     }
     bank.update(overrides)
     return bank
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_throttle(migrated_db) -> Iterator[None]:
+    """El límite de logins por IP es global (todas las pruebas usan la IP 'testclient'); se limpia por prueba."""
+    from sqlalchemy import create_engine, text
+
+    eng = create_engine(os.environ["MIGRATION_DATABASE_URL"])
+    with eng.begin() as conn:
+        conn.execute(text("DELETE FROM access_throttle WHERE key LIKE 'admin-login:%'"))
+    eng.dispose()
+    yield

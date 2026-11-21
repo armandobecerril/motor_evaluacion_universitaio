@@ -93,10 +93,16 @@ def catalog(p: AdminPrincipal = Depends(active_admin)) -> list[dict[str, Any]]:
                     load_course(s, p, course.id)
                 except HTTPException:
                     continue
+            mods = s.execute(
+                select(models.CourseModule.module_number, models.CourseModule.name)
+                .where(models.CourseModule.course_id == course.id)
+                .order_by(models.CourseModule.module_number)
+            ).all()
             out.append(
                 {
                     "university": {"id": str(uni.id), "code": uni.code, "name": uni.name},
                     "course": {"id": str(course.id), "code": course.code, "name": course.name},
+                    "modules": [{"number": n, "name": name} for n, name in mods],
                 }
             )
         return out

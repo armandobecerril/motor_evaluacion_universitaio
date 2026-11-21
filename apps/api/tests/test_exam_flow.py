@@ -310,3 +310,64 @@ def test_regenerated_code_invalidates_previous(admin, course):
     assert new != pub["access_code"]
     assert _student(pub["access_code"])[1].status_code == 404
     assert _student(new)[1].status_code == 200
+
+
+# ------------------------------------------------- módulos por examen (evaluación 2) ---
+
+
+def test_exam_with_selected_modules_only_uses_those(admin, course):
+    pub = _published(admin, course, modules=[3, 1])
+    assert pub["config"]["modules"] == [1, 3] and pub["config"]["questions_per_attempt"] == 8
+    with db.tenant_session(course.university_id) as s:
+        mods = set(
+            s.scalars(
+                select(models.QuestionBank.module_number)
+                .join(models.ExamQuestion, models.ExamQuestion.question_id == models.QuestionBank.id)
+                .where(models.ExamQuestion.exam_id == uuid.UUID(pub["id"]))
+            )
+        )
+    assert mods == {1, 3}
+    c, r = _student(pub["access_code"])
+    assert r.status_code == 200
+    q = c.get("/api/student/current", headers=H).json()
+    assert q["total"] == 8
+
+
+def test_exam_rejects_unknown_or_empty_modules(admin, course):
+    now = datetime.now(UTC)
+    body = {
+        "name": "Parcial 2",
+        "code": "P2-X",
+        "starts_at": (now - timedelta(minutes=5)).isoformat(),
+        "ends_at": (now + timedelta(hours=2)).isoformat(),
+    }
+    r = admin.post(f"/api/admin/courses/{course.id}/exams", json={**body, "modules": [9]}, headers=H)
+    assert r.status_code == 422 and "9" in r.json()["detail"]
+    r = admin.post(f"/api/admin/courses/{course.id}/exams", json={**body, "modules": []}, headers=H)
+    assert r.status_code == 422
+
+
+def test_seed_adds_missing_modules_to_existing_course(admin, course, tmp_path):
+    from exam_engine.seeding import seed_catalog
+
+    with db.tenant_session(None, platform_admin=True) as s:
+        uni = s.get(models.University, course.university_id)
+        data = {
+            "university": {"code": uni.code, "name": uni.name},
+            "course": {
+                "code": course.code,
+                "name": course.name,
+                "config": {},
+                "modules": [{"module_number": 5, "name": "Módulo nuevo"}],
+                "sources": [
+                    {"file_name": "05_nuevo.pptx", "page_count": 10, "usage": "question_source", "module_number": 5}
+                ],
+            },
+        }
+    f = tmp_path / "e2.json"
+    f.write_text(json.dumps(data), encoding="utf-8")
+    assert "+1 módulos · +1 fuentes" in seed_catalog(f)
+    assert seed_catalog(f).startswith("sin cambios")
+    cat = admin.get("/api/admin/catalog").json()
+    entry = next(e for e in cat if e["course"]["id"] == str(course.id))
+    assert [m["number"] for m in entry["modules"]] == [1, 2, 3, 4, 5]

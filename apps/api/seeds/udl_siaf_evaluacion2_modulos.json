@@ -1,0 +1,80 @@
+{
+  "university": {
+    "code": "UDL",
+    "name": "UDL"
+  },
+  "course": {
+    "code": "SIAF",
+    "name": "Sistemas Informáticos Aplicados a Finanzas",
+    "config": {
+      "modules_count": 4,
+      "questions_per_attempt": 200,
+      "per_module_quota": 50,
+      "max_variants_per_group": 2,
+      "selection": "balanced_by_group",
+      "seconds_per_question": 20,
+      "network_tolerance_ms": 0,
+      "window_minutes": 80,
+      "scoring": {
+        "correct": 1,
+        "wrong": -1,
+        "omitted": 0,
+        "expired": 0,
+        "min_grade": 0,
+        "max_grade": 100
+      },
+      "allow_skip": true,
+      "attempts_per_student": 1
+    },
+    "modules": [
+      {
+        "module_number": 5,
+        "name": "Automatización Financiera: RPA, APIs e Integración"
+      },
+      {
+        "module_number": 6,
+        "name": "Del Business Intelligence al Business Analytics"
+      },
+      {
+        "module_number": 7,
+        "name": "Business Analytics II: de los modelos a las decisiones"
+      },
+      {
+        "module_number": 8,
+        "name": "Inteligencia Artificial aplicada a Finanzas"
+      }
+    ],
+    "sources": [
+      {
+        "file_name": "04_AUTOMATIZACION-FINANCIERA.pptx",
+        "page_count": 23,
+        "usage": "question_source",
+        "module_number": 5
+      },
+      {
+        "file_name": "06_Del-Business-Intelligence-al-Business-Analytics.pptx",
+        "page_count": 23,
+        "usage": "question_source",
+        "module_number": 6
+      },
+      {
+        "file_name": "07_Business-Analytics-II-de-los-modelos-analiticos-a-las-decisiones-empresariales.pptx",
+        "page_count": 12,
+        "usage": "question_source",
+        "module_number": 7
+      },
+      {
+        "file_name": "08_Inteligencia_Artificial.pptx",
+        "page_count": 15,
+        "usage": "question_source",
+        "module_number": 8
+      },
+      {
+        "file_name": "08_Inteligencia_Artificial_Class.pptx",
+        "page_count": 13,
+        "usage": "question_source",
+        "module_number": 8
+      }
+    ]
+  }
+}

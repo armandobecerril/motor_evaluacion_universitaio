@@ -174,7 +174,13 @@ function AdminHome() {
       {courseId && tab === 'revision' && (
         <ReviewPanel key={`r${courseId}`} courseId={courseId} onChanged={() => setVersion((v) => v + 1)} />
       )}
-      {courseId && tab === 'examenes' && <ExamsPanel key={`e${courseId}${version}`} courseId={courseId} />}
+      {courseId && tab === 'examenes' && (
+        <ExamsPanel
+          key={`e${courseId}${version}`}
+          courseId={courseId}
+          modules={catalog.find((c) => c.course.id === courseId)?.modules ?? []}
+        />
+      )}
     </div>
   );
 }

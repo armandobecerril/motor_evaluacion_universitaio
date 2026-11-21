@@ -104,3 +104,16 @@ th { background: var(--gray-50); color: var(--navy-900); }
 label > input:not([type='checkbox']), label > select { width: 100%; min-width: 0; }
 .container { max-width: 1080px; }
 th, td { padding: 8px 8px; }
+
+.modules-pick {
+  border: 1px solid var(--border, #d0d7de);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.modules-pick legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}

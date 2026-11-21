@@ -9,9 +9,14 @@ export interface Me {
   role: string;
   must_change_password: boolean;
 }
+export interface CourseModuleInfo {
+  number: number;
+  name: string;
+}
 export interface CatalogEntry {
   university: { id: string; code: string; name: string };
   course: { id: string; code: string; name: string };
+  modules?: CourseModuleInfo[];
 }
 export interface Finding {
   level: 'BLOQUEANTE' | 'ALTO' | 'MEDIO' | 'INFO';
@@ -122,6 +127,7 @@ export interface Exam {
     window_minutes: number;
     scoring: { correct: number; wrong: number };
     show_grade_to_student: boolean;
+    modules?: number[];
   };
   published_at: string | null;
   readiness?: { ready: boolean; modules: ModuleReadiness[] };
@@ -138,6 +144,7 @@ export interface ExamInput {
   window_minutes: number;
   wrong_penalty: number;
   show_grade_to_student: boolean;
+  modules?: number[];
 }
 export interface ResultRow {
   attempt_id: string;

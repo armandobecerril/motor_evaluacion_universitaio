@@ -209,10 +209,21 @@ def create_exam(
     starts_at: datetime,
     ends_at: datetime,
     overrides: dict[str, Any],
+    modules: list[int] | None = None,
 ) -> models.Exam:
     if ends_at <= starts_at:
         raise ExamError("La fecha de cierre debe ser posterior a la de apertura.")
-    cfg = build_config(course, module_numbers(s, course.id), overrides)
+    available = module_numbers(s, course.id)
+    if modules:
+        chosen = sorted(set(modules))
+        unknown = [m for m in chosen if m not in available]
+        if unknown:
+            raise ExamError(f"Módulos inexistentes en la materia: {', '.join(map(str, unknown))}.")
+    else:
+        chosen = available
+    if not chosen:
+        raise ExamError("La materia no tiene módulos para armar el examen.")
+    cfg = build_config(course, chosen, overrides)
     exam = models.Exam(
         university_id=course.university_id,
         course_id=course.id,
@@ -281,7 +292,8 @@ def publish(s: Session, exam: models.Exam, *, actor: str) -> str:
             if x["selectable"] < x["required"]
         )
         raise ExamError(f"Banco aprobado insuficiente para la configuración: {detail}.")
-    pool = _approved_pool(s, exam.course_id)
+    mods = set(exam.config["modules"])
+    pool = [row for row in _approved_pool(s, exam.course_id) if row[1] in mods]
     s.add_all(
         models.ExamQuestion(exam_id=exam.id, question_id=qid, university_id=exam.university_id) for qid, _, _ in pool
     )

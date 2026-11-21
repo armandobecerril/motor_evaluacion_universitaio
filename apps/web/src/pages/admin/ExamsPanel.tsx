@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { adminApi, ApiError, type Exam } from '../../lib/admin';
+import { adminApi, ApiError, type CourseModuleInfo, type Exam } from '../../lib/admin';
 import { ResultsView } from './ResultsView';
 
 const fmt = (iso: string) =>
@@ -17,7 +17,7 @@ const STATUS: Record<string, string> = {
   cancelled: 'Cancelado',
 };
 
-export function ExamsPanel({ courseId }: { courseId: string }) {
+export function ExamsPanel({ courseId, modules = [] }: { courseId: string; modules?: CourseModuleInfo[] }) {
   const [exams, setExams] = useState<Exam[]>([]);
   const [error, setError] = useState('');
   const [code, setCode] = useState<{ examId: string; value: string } | null>(null);
@@ -46,6 +46,11 @@ export function ExamsPanel({ courseId }: { courseId: string }) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const num = (k: string) => Number(f.get(k));
+    const chosen = f.getAll('modules').map(Number);
+    if (modules.length > 0 && chosen.length === 0) {
+      setError('Selecciona al menos un módulo para el examen.');
+      return;
+    }
     await run(async () => {
       await adminApi.createExam(courseId, {
         name: String(f.get('name')),
@@ -58,6 +63,7 @@ export function ExamsPanel({ courseId }: { courseId: string }) {
         window_minutes: num('window'),
         wrong_penalty: num('penalty'),
         show_grade_to_student: f.get('show_grade') === 'on',
+        ...(modules.length > 0 ? { modules: chosen } : {}),
       });
     });
   }
@@ -129,6 +135,17 @@ export function ExamsPanel({ courseId }: { courseId: string }) {
               <input name="penalty" type="number" min={0} max={5} defaultValue={1} required />
             </label>
           </div>
+          {modules.length > 0 && (
+            <fieldset className="modules-pick">
+              <legend>Módulos que entran en este examen</legend>
+              {modules.map((m) => (
+                <label key={m.number} className="check">
+                  <input name="modules" type="checkbox" value={m.number} defaultChecked /> Módulo {m.number} ·{' '}
+                  {m.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
           <label className="check">
             <input name="show_grade" type="checkbox" /> Mostrar la calificación al alumno al terminar
           </label>
@@ -157,8 +174,9 @@ export function ExamsPanel({ courseId }: { courseId: string }) {
               </div>
               <p className="muted">
                 {fmt(ex.starts_at)} → {fmt(ex.ends_at)} · {ex.config.questions_per_attempt} preguntas (
-                {ex.config.per_module_quota} por módulo) · {ex.config.seconds_per_question} s c/u · error resta{' '}
-                {Math.abs(ex.config.scoring.wrong)}
+                {ex.config.per_module_quota} por módulo
+                {ex.config.modules ? ` · módulos ${ex.config.modules.join(', ')}` : ''}) ·{' '}
+                {ex.config.seconds_per_question} s c/u · error resta {Math.abs(ex.config.scoring.wrong)}
               </p>
               {ex.status === 'draft' && ex.readiness && (
                 <div>

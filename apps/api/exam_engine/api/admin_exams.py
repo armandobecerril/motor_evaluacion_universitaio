@@ -88,6 +88,7 @@ class ExamIn(BaseModel):
     wrong_penalty: int | None = Field(default=None, ge=0, le=5)
     network_tolerance_ms: int | None = Field(default=None, ge=0, le=5000)
     show_grade_to_student: bool | None = None
+    modules: list[int] | None = Field(default=None, min_length=1, max_length=50)
 
 
 class WindowIn(BaseModel):
@@ -121,7 +122,7 @@ def list_exams(course_id: uuid.UUID, p: AdminPrincipal = Depends(active_admin)) 
 
 @router.post("/courses/{course_id}/exams")
 def create_exam(course_id: uuid.UUID, body: ExamIn, p: AdminPrincipal = Depends(active_admin)) -> dict[str, Any]:
-    overrides = body.model_dump(exclude={"name", "code", "starts_at", "ends_at"})
+    overrides = body.model_dump(exclude={"name", "code", "starts_at", "ends_at", "modules"})
     with admin_scope(p) as s:
         course = load_course(s, p, course_id)
         try:
@@ -134,6 +135,7 @@ def create_exam(course_id: uuid.UUID, body: ExamIn, p: AdminPrincipal = Depends(
                 starts_at=_aware(body.starts_at),
                 ends_at=_aware(body.ends_at),
                 overrides=overrides,
+                modules=body.modules,
             )
         except svc.ExamError as exc:
             raise _err(exc) from None
