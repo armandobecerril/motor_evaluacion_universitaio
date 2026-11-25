@@ -383,3 +383,27 @@ def test_seed_adds_missing_modules_to_existing_course(admin, course, tmp_path):
     assert [m["number"] for m in entry["modules"]] == [1, 2, 3, 4, 5, 6]
     assert entry["modules"][4]["name"] == "Nombre corregido"
     assert entry["modules"][0]["name"] != "Intento de renombrar"
+
+
+def test_retire_bank_only_touches_that_bank_and_keeps_published_exam(admin, course):
+    from exam_engine.maintenance import retire_bank
+
+    pub = _published(admin, course)  # congela el conjunto de preguntas del examen
+    with db.tenant_session(None, platform_admin=True) as s:
+        uni = s.get(models.University, course.university_id)
+        code = s.scalar(select(models.QuestionBank.bank_code).where(models.QuestionBank.course_id == course.id))
+    sim = retire_bank(uni.code, course.code, code, apply=False)
+    assert sim.startswith("[simulación]")
+    with db.tenant_session(course.university_id) as s:
+        assert (
+            s.scalar(
+                select(func.count()).select_from(models.QuestionBank).where(models.QuestionBank.status == "retired")
+            )
+            == 0
+        )
+    assert retire_bank(uni.code, course.code, "OTRO-BANCO", apply=True).startswith("Nada que retirar")
+    assert retire_bank(uni.code, course.code, code, apply=True).startswith("Retirados")
+    # El examen ya publicado sigue funcionando con su conjunto congelado.
+    c, r = _student(pub["access_code"])
+    assert r.status_code == 200
+    assert c.get("/api/student/current", headers=H).json()["total"] == pub["config"]["questions_per_attempt"]

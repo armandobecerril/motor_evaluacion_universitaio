@@ -69,6 +69,12 @@ def _seed(a: argparse.Namespace) -> None:
     print(seed_catalog(Path(a.file)))
 
 
+def _retire_bank(a: argparse.Namespace) -> None:
+    from .maintenance import retire_bank
+
+    print(retire_bank(a.university, a.course, a.bank_code, apply=a.apply))
+
+
 def _bank_report(a: argparse.Namespace) -> None:
     from .services.bank_format import parse_bank
     from .services.quality import build_report, render_markdown
@@ -113,6 +119,13 @@ def main(argv: list[str] | None = None) -> None:
     sd = sub.add_parser("seed-catalog", help="Siembra universidad, materia, módulos y fuentes desde JSON")
     sd.add_argument("file")
     sd.set_defaults(fn=_seed)
+
+    rb = sub.add_parser("retire-bank", help="Retira los reactivos de un banco ya aplicado (simula sin --apply)")
+    rb.add_argument("--university", required=True, help="Código de universidad, p. ej. UDL")
+    rb.add_argument("--course", required=True, help="Código de materia, p. ej. SIAF")
+    rb.add_argument("--bank-code", required=True, help="metadata.id del banco, p. ej. UDL-SIAF-EVALUACION-2")
+    rb.add_argument("--apply", action="store_true", help="Aplica el cambio (sin esto solo muestra lo que haría)")
+    rb.set_defaults(fn=_retire_bank)
 
     r = sub.add_parser("bank-report", help="Reporte de calidad de un banco (sin BD)")
     r.add_argument("file")
